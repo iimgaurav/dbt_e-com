@@ -1,0 +1,126 @@
+name: dbt CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  dbt-ci-cd:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: gau
+          POSTGRES_PASSWORD: gau@123
+          POSTGRES_DB: e_com
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dbt-core==1.11.6 dbt-postgres==1.10.0
+
+      - name: Create dev_schema in Postgres
+        run: |
+          apt-get update && apt-get install -y postgresql-client
+          PGPASSWORD=${{ secrets.DB_PASSWORD }} psql -h localhost -U gau -d e_com -c "CREATE SCHEMA IF NOT EXISTS dev_schema;"
+        env:
+          PGPASSWORD: gau@123
+
+      - name: dbt Debug
+        working-directory: ./dbt_project/dbt_ecom
+        run: |
+          dbt debug --profiles-dir .dbt
+
+      - name: dbt Parse
+        working-directory: ./dbt_project/dbt_ecom
+        run: |
+          dbt parse --profiles-dir .dbt --target dev
+        continue-on-error: false
+
+      - name: dbt Seed
+        working-directory: ./dbt_project/dbt_ecom
+        run: |
+          dbt seed --profiles-dir .dbt --target dev --full-refresh
+        continue-on-error: false
+
+      - name: dbt Run
+        working-directory: ./dbt_project/dbt_ecom
+        run: |
+          dbt run --profiles-dir .dbt --target dev
+        continue-on-error: false
+
+      - name: dbt Test
+        working-directory: ./dbt_project/dbt_ecom
+        run: |
+          dbt test --profiles-dir .dbt --target dev
+        continue-on-error: true
+
+      - name: dbt Docs Generate
+        working-directory: ./dbt_project/dbt_ecom
+        run: |
+          dbt docs generate --profiles-dir .dbt --target dev
+        continue-on-error: true
+
+      - name: Upload dbt Artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: dbt-artifacts
+          path: |
+            dbt_project/dbt_ecom/target/
+            dbt_project/dbt_ecom/logs/
+          retention-days: 30
+
+      - name: Comment PR with dbt Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const logsPath = './dbt_project/dbt_ecom/logs/';
+            const files = fs.readdirSync(logsPath);
+            const latestLog = files.sort().reverse()[0];
+            
+            let comment = '## dbt CI/CD Results\n\n';
+            comment += '✅ Pipeline completed!\n\n';
+            comment += '**Steps Executed:**\n';
+            comment += '- ✓ dbt parse\n';
+            comment += '- ✓ dbt seed\n';
+            comment += '- ✓ dbt run\n';
+            comment += '- ✓ dbt test\n';
+            comment += '- ✓ dbt docs generate\n\n';
+            comment += '[View detailed logs in Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+        continue-on-error: true

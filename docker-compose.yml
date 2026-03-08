@@ -1,0 +1,34 @@
+services: 
+  postgres: 
+    image: postgres:15 
+    container_name: ecom_db_v2  # <-- Change this name here
+    restart: always 
+    environment: 
+      POSTGRES_USER: gau 
+      POSTGRES_PASSWORD: gau@123
+      POSTGRES_DB: e_com       # Changed hyphen to underscore for stability
+    ports: 
+      - "5433:5432"
+    volumes: 
+      - postgres_data:/var/lib/postgresql/data 
+    networks: 
+      - dbt_network 
+ 
+  dbt: 
+    build: . 
+    container_name: dbt_core_v2 
+    volumes: 
+      # Change the first line to include /dbt_ecom
+      - ./dbt_project/dbt_ecom:/usr/app
+      - ./dbt_project/dbt_ecom/.dbt:/root/.dbt
+    depends_on: 
+      - postgres 
+    networks: 
+      - dbt_network
+ 
+volumes: 
+  postgres_data: 
+ 
+networks: 
+  dbt_network: 
+    driver: bridge
