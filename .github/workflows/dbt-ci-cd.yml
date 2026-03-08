@@ -52,35 +52,59 @@ jobs:
 
       - name: dbt Debug
         working-directory: ./dbt_project/dbt_ecom
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           dbt debug --profiles-dir .dbt
 
       - name: dbt Parse
         working-directory: ./dbt_project/dbt_ecom
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           dbt parse --profiles-dir .dbt --target dev
         continue-on-error: false
 
       - name: dbt Seed
         working-directory: ./dbt_project/dbt_ecom
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           dbt seed --profiles-dir .dbt --target dev --full-refresh
         continue-on-error: false
 
       - name: dbt Run
         working-directory: ./dbt_project/dbt_ecom
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           dbt run --profiles-dir .dbt --target dev
         continue-on-error: false
 
       - name: dbt Test
         working-directory: ./dbt_project/dbt_ecom
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           dbt test --profiles-dir .dbt --target dev
         continue-on-error: true
 
       - name: dbt Docs Generate
         working-directory: ./dbt_project/dbt_ecom
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           dbt docs generate --profiles-dir .dbt --target dev
         continue-on-error: true
