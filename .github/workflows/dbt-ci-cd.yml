@@ -13,7 +13,7 @@ on:
 jobs:
   dbt-ci-cd:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:15
@@ -38,77 +38,87 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: 'requirements.txt'
+          cache-dependency-path: 'requirements.txt'   # ✅ make sure requirements.txt is in repo root
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create dev_schema in Postgres
+      - name: Install PostgreSQL client        # ✅ FIX 1 — added sudo
         run: |
-          apt-get update && apt-get install -y postgresql-client
-          PGPASSWORD=${{ secrets.DB_PASSWORD }} psql -h localhost -U gau -d e_com -c "CREATE SCHEMA IF NOT EXISTS dev_schema;"
-        env:
-          PGPASSWORD: gau@123
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Create dev_schema in Postgres    # ✅ FIX 2 — removed duplicate PGPASSWORD, one clean env var
+        run: |
+          PGPASSWORD=gau@123 psql -h localhost -U gau -d e_com -c "CREATE SCHEMA IF NOT EXISTS dev_schema;"
 
       - name: dbt Debug
         working-directory: ./dbt_project/dbt_ecom
-        env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          dbt debug --profiles-dir .dbt
+        env:                                   # ✅ FIX 3 — env vars passed so profiles.yml can read them
+          DB_HOST: localhost
+          DB_USER: gau
+          DB_PASSWORD: gau@123
+          DB_NAME: e_com
+          DB_SCHEMA: dev_schema
+          DB_PORT: 5432
+        run: dbt debug --profiles-dir .dbt
 
       - name: dbt Parse
         working-directory: ./dbt_project/dbt_ecom
         env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          dbt parse --profiles-dir .dbt --target dev
-        continue-on-error: false
+          DB_HOST: localhost
+          DB_USER: gau
+          DB_PASSWORD: gau@123
+          DB_NAME: e_com
+          DB_SCHEMA: dev_schema
+          DB_PORT: 5432
+        run: dbt parse --profiles-dir .dbt --target dev
 
       - name: dbt Seed
         working-directory: ./dbt_project/dbt_ecom
         env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          dbt seed --profiles-dir .dbt --target dev --full-refresh
-        continue-on-error: false
+          DB_HOST: localhost
+          DB_USER: gau
+          DB_PASSWORD: gau@123
+          DB_NAME: e_com
+          DB_SCHEMA: dev_schema
+          DB_PORT: 5432
+        run: dbt seed --profiles-dir .dbt --target dev --full-refresh
 
       - name: dbt Run
         working-directory: ./dbt_project/dbt_ecom
         env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          dbt run --profiles-dir .dbt --target dev
-        continue-on-error: false
+          DB_HOST: localhost
+          DB_USER: gau
+          DB_PASSWORD: gau@123
+          DB_NAME: e_com
+          DB_SCHEMA: dev_schema
+          DB_PORT: 5432
+        run: dbt run --profiles-dir .dbt --target dev
 
       - name: dbt Test
         working-directory: ./dbt_project/dbt_ecom
         env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          dbt test --profiles-dir .dbt --target dev
+          DB_HOST: localhost
+          DB_USER: gau
+          DB_PASSWORD: gau@123
+          DB_NAME: e_com
+          DB_SCHEMA: dev_schema
+          DB_PORT: 5432
+        run: dbt test --profiles-dir .dbt --target dev
         continue-on-error: true
 
       - name: dbt Docs Generate
         working-directory: ./dbt_project/dbt_ecom
         env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          dbt docs generate --profiles-dir .dbt --target dev
+          DB_HOST: localhost
+          DB_USER: gau
+          DB_PASSWORD: gau@123
+          DB_NAME: e_com
+          DB_SCHEMA: dev_schema
+          DB_PORT: 5432
+        run: dbt docs generate --profiles-dir .dbt --target dev
         continue-on-error: true
 
       - name: Upload dbt Artifacts
@@ -127,21 +137,16 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const logsPath = './dbt_project/dbt_ecom/logs/';
-            const files = fs.readdirSync(logsPath);
-            const latestLog = files.sort().reverse()[0];
-            
-            let comment = '## dbt CI/CD Results\n\n';
-            comment += '✅ Pipeline completed!\n\n';
-            comment += '**Steps Executed:**\n';
-            comment += '- ✓ dbt parse\n';
-            comment += '- ✓ dbt seed\n';
-            comment += '- ✓ dbt run\n';
-            comment += '- ✓ dbt test\n';
-            comment += '- ✓ dbt docs generate\n\n';
-            comment += '[View detailed logs in Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})';
-            
+            const comment = `## dbt CI/CD Results\n\n` +
+              `✅ Pipeline completed!\n\n` +
+              `**Steps Executed:**\n` +
+              `- ✓ dbt parse\n` +
+              `- ✓ dbt seed\n` +
+              `- ✓ dbt run\n` +
+              `- ✓ dbt test\n` +
+              `- ✓ dbt docs generate\n\n` +
+              `[View detailed logs in Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
